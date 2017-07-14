@@ -1,0 +1,9 @@
+#!/bin/bash
+# Preinstallation dirtytooth package
+
+if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
+  echo "Welcome to Dirtytooth installer"
+else
+  echo "Dirtytooth installer needs Internet to install the necessary dependencies."
+  exit 1
+fi

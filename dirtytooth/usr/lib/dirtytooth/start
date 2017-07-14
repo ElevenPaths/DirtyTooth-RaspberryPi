@@ -1,0 +1,12 @@
+#!/bin/bash
+
+PULSE=$(ps cax | grep -v grep | grep pulseaudio)
+if [ "$PULSE" == "" ] ; then
+  su $SUDO_USER -c 'pulseaudio -D'
+fi
+
+sudo hciconfig hci0 name "Dirtytooth Speaker"
+sudo hciconfig hci0 class 0x240418
+sudo hciconfig hci0 sspmode 1
+sudo hciconfig hci0 piscan
+/usr/lib/dirtytooth/dirtyagent &

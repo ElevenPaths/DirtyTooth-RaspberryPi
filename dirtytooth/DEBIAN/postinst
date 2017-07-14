@@ -1,0 +1,42 @@
+#!/bin/bash
+# Postinstallation dirtytooth package
+
+nobexurl="https://github.com/nccgroup/nOBEX.git"
+nobexcommit="0583c72"
+
+# Detect if PyBluez is installed
+pybluez=$(pip list | grep PyBluez)
+if [ "$pybluez" == "" ] ; then
+    sudo pip install pybluez==0.22
+fi
+
+# Detect if nOBEX is installed
+nobex=$(pip list | grep nOBEX)
+if [ "$nobex" == "" ] ; then
+    cd /tmp
+    git clone $nobexurl
+    cd nOBEX
+    git reset --hard $nobexcommit
+    python setup.py install
+    cd /tmp
+    rm -rf nOBEX
+fi
+
+# Detect if psutil is installed
+psutil=$(pip list | grep psutil)
+if [ "$psutil" == "" ] ; then
+    sudo pip install psutil==5.2.2
+fi
+
+my_sudo_user=$SUDO_USER
+sudo usermod -a -G lp $my_sudo_user
+
+sed -i '/.*resample-method =.*/c\resample-method = trivial' /etc/pulse/daemon.conf
+
+# Add audio hook
+audiohook=$(cat /etc/udev/rules.d/99-com.rules | grep /usr/lib/udev/bluetooth)
+if [ "$audiohook" == "" ] ; then
+    sudo sed -i '/SUBSYSTEM=="input".*/a KERNEL=="input\[0-9\]*", RUN+="/usr/lib/udev/bluetooth"' /etc/udev/rules.d/99-com.rules
+fi
+
+echo "Dirtytooth installation finished"
