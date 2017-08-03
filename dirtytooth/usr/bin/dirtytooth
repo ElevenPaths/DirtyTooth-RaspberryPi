@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='Dirtytooth package',
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument('--start', action='store_true', help='Start agent discover')
 group.add_argument('--stop', action='store_true', help='Stop agent discover')
-group.add_argument('-mac', help='MAC device to get dirtytooth! }:)')
+group.add_argument('--mac', help='MAC device to get dirtytooth! }:)')
 args = parser.parse_args()
 
 

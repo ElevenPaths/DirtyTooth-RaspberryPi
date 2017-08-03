@@ -174,7 +174,7 @@ case "$ACTION" in
 	#Finally get the phonebook
 	sleep 2
 	# sudo python /usr/bin/dirtytooth $MAC
-  sudo dirtytooth -mac $MAC
+  sudo dirtytooth --mac $MAC
 	;;
 
 "remove")
