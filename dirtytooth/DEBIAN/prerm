@@ -1,0 +1,5 @@
+#!/bin/bash
+# Pre remove script for dirtytooth package
+
+my_sudo_user=$SUDO_USER
+sudo gpasswd -d $my_sudo_user lp
