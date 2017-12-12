@@ -1,0 +1,91 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# pyudevmondt - Python udev Monitor for DirtyTooth
+
+import time
+import logging
+import subprocess
+
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+LOG_PATH = '/var/log/dirtytooth'
+# Audio Output for raspberry-pi: 0=auto, 1=headphones, 2=hdmi.
+AUDIO_OUTPUT = 1
+
+
+class MyHandler(FileSystemEventHandler):
+
+    def on_created(self, event):
+        if not event.is_directory:
+            # Wait until the BT device is connected
+            time.sleep(2)
+            mac = self.get_mac()
+            if mac:
+                logging.info("Device {} added".format(mac))
+
+                # Turn off bluetooth discovery before connecting existing BT device to audio
+                subprocess.call(["sudo", "hciconfig", "hci0", "noscan"])
+                logging.info("Set speaker as hidden")
+
+                # Turn volume to max
+                self.volume_max()
+
+                # This script is called early, we just wait to be sure that bluealsa discovered the device
+                time.sleep(2)
+                logging.info("Starting bluealsa...")
+                subprocess.Popen(["bluealsa-aplay", mac])
+
+                time.sleep(2)
+                logging.info("Starting dirtytooth...")
+                subprocess.call(["sudo", "dirtytooth", "--mac", mac])
+
+            else:
+                logging.warning("MAC not founded...")
+
+            logging.info("--")
+
+    def on_deleted(self, event):
+        if not event.is_directory:
+            # Turn off bluetooth discovery before connecting existing BT device to audio
+            subprocess.call(["sudo", "hciconfig", "hci0", "piscan"])
+            logging.info("Set speaker as visible")
+            logging.info("Device removed")
+
+            logging.info("--")
+
+    def get_mac(self):
+        mac = None
+        for x in range(0, 50):
+            try:
+                path = "/sys/devices/virtual/input/input{}/name".format(x)
+                file = open(path, "r")
+                mac = file.readline()[0:17]
+                break
+            except Exception as e:
+                pass
+        return mac
+
+    def volume_max(self):
+        subprocess.call(["amixer", "cset", "numid=3", str(AUDIO_OUTPUT)])
+        subprocess.call(["amixer", "sset", "PCM", "100%"])
+        logging.info("Volume max done!")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(format='%(asctime)s - %(levelname)s:%(message)s',
+                        datefmt='%d/%m/%Y %I:%M:%S %p',
+                        filename=LOG_PATH,
+                        level=logging.INFO)
+
+    path = '/dev/input/'
+    event_handler = MyHandler()
+    observer = Observer()
+    observer.schedule(event_handler, path, recursive=True)
+    observer.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()

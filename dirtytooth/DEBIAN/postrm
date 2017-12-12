@@ -2,9 +2,10 @@
 # Post remove script for dirtytooth package
 
 # Delete audio hook
-audiohook=$(cat /etc/udev/rules.d/99-com.rules | grep /usr/lib/udev/bluetooth)
-if [ "$audiohook" != "" ] ; then
-    sudo sed -i '/.*\/usr\/lib\/udev\/bluetooth"/d' /etc/udev/rules.d/99-com.rules
-fi
+# audiohook=$(cat /etc/udev/rules.d/99-com.rules | grep /usr/lib/udev/bluetooth)
+# if [ "$audiohook" != "" ] ; then
+#     sudo sed -i '/.*\/usr\/lib\/udev\/bluetooth"/d' /etc/udev/rules.d/99-com.rules
+# fi
 
 echo "Dirtytooth package removed"
+exit 0

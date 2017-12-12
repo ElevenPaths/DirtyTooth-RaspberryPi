@@ -28,15 +28,26 @@ if [ "$psutil" == "" ] ; then
     sudo pip install psutil==5.2.2
 fi
 
-my_sudo_user=$SUDO_USER
-sudo usermod -a -G lp $my_sudo_user
-
-sed -i '/.*resample-method =.*/c\resample-method = trivial' /etc/pulse/daemon.conf
-
-# Add audio hook
-audiohook=$(cat /etc/udev/rules.d/99-com.rules | grep /usr/lib/udev/bluetooth)
-if [ "$audiohook" == "" ] ; then
-    sudo sed -i '/SUBSYSTEM=="input".*/a KERNEL=="input\[0-9\]*", RUN+="/usr/lib/udev/bluetooth"' /etc/udev/rules.d/99-com.rules
+# Detect if watchdog is installed
+watchdog=$(pip list | grep watchdog)
+if [ "$watchdog" == "" ] ; then
+    sudo pip install watchdog==0.8.3
 fi
 
+# Add audio hook
+# audiohook=$(cat /etc/udev/rules.d/99-com.rules | grep /usr/lib/udev/bluetooth)
+# if [ "$audiohook" == "" ] ; then
+#     sudo sed -i '/SUBSYSTEM=="input".*/a KERNEL=="input\[0-9\]*", PROGRAM="/usr/lib/udev/bluetooth"' /etc/udev/rules.d/99-com.rules
+# fi
+
+MAC_ADAPTER=$(hcitool dev | grep -o "[[:xdigit:]:]\{11,17\}")
+
+# Add info to asoundrc
+asoundrc=/root/.asoundrc
+echo "defaults.bluealsa.interface \"hci0\"" > $asoundrc
+echo "defaults.bluealsa.device \"$MAC_ADAPTER\"" >> $asoundrc
+echo "defaults.bluealsa.profile \"a2dp\"" >> $asoundrc
+echo "defaults.bluealsa.delay 10000" >> $asoundrc
+
 echo "Dirtytooth installation finished"
+exit 0

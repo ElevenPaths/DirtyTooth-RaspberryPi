@@ -1,9 +1,9 @@
 Package: dirtytooth
-Version: 1.0
+Version: 2.0
 Section: base
 Priority: optional
 Architecture: armhf
-Depends: pi-bluetooth, libbluetooth-dev, python-dev, python-dbus, python-pip, python-gobject, python-gobject-2, git, pulseaudio, pulseaudio-module-bluetooth
+Depends: bluealsa, libbluetooth-dev, python-dbus, python-pip, git
 Maintainer: Eleven Paths <labs@elevenpaths.com>
-Description: Dirtytooth package
+Description: DirtyTooth package
  DirtyTooth is a small hack that takes advantage of the iOS configuration as far as bluetooth profile management is concerned, through this little hack you can extract information from users an their environment.

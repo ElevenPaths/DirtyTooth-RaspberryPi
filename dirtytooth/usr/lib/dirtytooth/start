@@ -1,8 +1,13 @@
 #!/bin/bash
 
-PULSE=$(ps cax | grep -v grep | grep pulseaudio)
-if [ "$PULSE" == "" ] ; then
-  su $SUDO_USER -c 'pulseaudio -D'
+BLUEALSA=$(ps cax | grep -v grep | grep bluealsa)
+if [ "$BLUEALSA" == "" ] ; then
+  sudo bluealsa &
+fi
+
+PYUDEVMONDT=$(ps cax | grep -v grep | grep pyudevmondt)
+if [ "$PYUDEVMONDT" == "" ] ; then
+  sudo /usr/lib/dirtytooth/pyudevmondt &
 fi
 
 sudo hciconfig hci0 name "Dirtytooth Speaker"

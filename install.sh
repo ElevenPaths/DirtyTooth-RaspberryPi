@@ -3,7 +3,7 @@
 if [ "$(whoami)" == "root" ] ; then
   if ping -q -c 1 -W 1 8.8.8.8 >/dev/null; then
     apt-get update
-    apt-get -y install pi-bluetooth libbluetooth-dev python-dev python-dbus python-pip python-gobject python-gobject-2 git pulseaudio pulseaudio-module-bluetooth
+    apt-get -y install bluealsa libbluetooth-dev python-dbus python-pip git
     dpkg -i dirtytooth.deb
   else
     echo "Dirtytooth installer needs Internet to install the necessary dependencies."

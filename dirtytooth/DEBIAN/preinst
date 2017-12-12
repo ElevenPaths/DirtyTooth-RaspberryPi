@@ -7,3 +7,5 @@ else
   echo "Dirtytooth installer needs Internet to install the necessary dependencies."
   exit 1
 fi
+
+exit 0

